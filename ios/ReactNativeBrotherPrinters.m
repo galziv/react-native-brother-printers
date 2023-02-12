@@ -30,7 +30,7 @@ RCT_EXPORT_MODULE()
 RCT_REMAP_METHOD(discoverPrinters, discoverOptions:(NSDictionary *)options resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 {
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSLog(@"Called the function");
+        NSLog(@"RNBrotherPrinters: Called the function");
 
         _brotherDeviceList = [[NSMutableArray alloc] initWithCapacity:0];
 
@@ -45,7 +45,7 @@ RCT_REMAP_METHOD(discoverPrinters, discoverOptions:(NSDictionary *)options resol
 
             [_networkManager setPrinterNames:printerList];
         } else {
-            NSLog(@"Could not find PrinterList.plist");
+            NSLog(@"RNBrotherPrinters: Could not find PrinterList.plist");
         }
 
         //    Start printer search
@@ -67,27 +67,37 @@ RCT_REMAP_METHOD(pingPrinter, printerAddress:(NSString *)ip resolver:(RCTPromise
     if (driverGenerateResult.error.code != BRLMOpenChannelErrorCodeNoError ||
         driverGenerateResult.driver == nil) {
 
-        NSLog(@"%@", @(driverGenerateResult.error.code));
+        NSLog(@"RNBrotherPrinters: %@", @(driverGenerateResult.error.code));
 
         return reject(DISCOVER_READER_ERROR, @"A problem occured when trying to execute discoverPrinters", Nil);
     }
 
-    NSLog(@"We were able to discover a printer");
+    NSLog(@"RNBrotherPrinters: We were able to discover a printer");
 
     resolve(Nil);
 }
 
 RCT_REMAP_METHOD(printImage, deviceInfo:(NSDictionary *)device printerUri: (NSString *)imageStr printImageOptions:(NSDictionary *)options resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 {
-    NSLog(@"Called the printImage function");
+    NSLog(@"RNBrotherPrinters: Called the printImage function");
     BRPtouchDeviceInfo *deviceInfo = [self deserializeDeviceInfo:device];
 
+
+    NSLog(@"RNBrotherPrinters: Opening wifi channel for IP %@", deviceInfo.strIPAddress);
     BRLMChannel *channel = [[BRLMChannel alloc] initWithWifiIPAddress:deviceInfo.strIPAddress];
+
+    // if (deviceInfo.strIPAddress) {
+    //     NSLog(@"RNBrotherPrinters: Opening wifi channel");
+    //     *channel = [[BRLMChannel alloc] initWithWifiIPAddress:deviceInfo.strIPAddress];
+    // } else if(deviceInfo.strBLELocalName) {
+    //     NSLog(@"RNBrotherPrinters: Opening bluetooth channel");
+    //     *channel = [[BRLMChannel alloc] initWithBluetoothLocalName:deviceInfo.bleLocalName];
+    // }
 
     BRLMPrinterDriverGenerateResult *driverGenerateResult = [BRLMPrinterDriverGenerator openChannel:channel];
     if (driverGenerateResult.error.code != BRLMOpenChannelErrorCodeNoError ||
         driverGenerateResult.driver == nil) {
-        NSLog(@"%@", @(driverGenerateResult.error.code));
+        NSLog(@"RNBrotherPrinters: %@", @(driverGenerateResult.error.code));
         return;
     }
 
@@ -96,6 +106,8 @@ RCT_REMAP_METHOD(printImage, deviceInfo:(NSDictionary *)device printerUri: (NSSt
     BRLMPrinterModel model = [BRLMPrinterClassifier transferEnumFromString:deviceInfo.strModelName];
     BRLMQLPrintSettings *qlSettings = [[BRLMQLPrintSettings alloc] initDefaultPrintSettingsWithPrinterModel:model];
 
+    NSLog(@"RNBrotherPrinters: Setting landscape orientation");
+    [qlSettings setPrintOrientation:1];
     qlSettings.autoCut = true;
 
     if (options[@"autoCut"]) {
@@ -106,20 +118,21 @@ RCT_REMAP_METHOD(printImage, deviceInfo:(NSDictionary *)device printerUri: (NSSt
         qlSettings.labelSize = [options[@"labelSize"] intValue];
     }
 
-    NSLog(@"Auto Cut: %@, Label Size: %@", options[@"autoCut"], options[@"labelSize"]);
+    NSLog(@"RNBrotherPrinters: Auto Cut: %@, Label Size: %@", options[@"autoCut"], options[@"labelSize"]);
 
 
     NSURL *url = [NSURL URLWithString:imageStr];
     BRLMPrintError *printError = [printerDriver printImageWithURL:url settings:qlSettings];
 
     if (printError.code != BRLMPrintErrorCodeNoError) {
-        NSLog(@"Error - Print Image: %@", printError);
+        NSLog(@"RNBrotherPrinters: Error - Print Image: %@", printError);
 
         NSError* error = [NSError errorWithDomain:@"com.react-native-brother-printers.rn" code:1 userInfo:[NSDictionary dictionaryWithObject:printError.description forKey:NSLocalizedDescriptionKey]];
 
+        NSLog(@"RNBrotherPrinters: Error details - Print Image: %@", error);
         reject(PRINT_ERROR, @"There was an error trying to print the image", error);
     } else {
-        NSLog(@"Success - Print Image");
+        NSLog(@"RNBrotherPrinters: Success - Print Image");
 
         resolve(Nil);
     }
@@ -129,20 +142,20 @@ RCT_REMAP_METHOD(printImage, deviceInfo:(NSDictionary *)device printerUri: (NSSt
 
 -(void)didFinishSearch:(id)sender
 {
-    NSLog(@"didFinishedSearch");
+    NSLog(@"RNBrotherPrinters: didFinishedSearch");
 
     //  get BRPtouchNetworkInfo Class list
     [_brotherDeviceList removeAllObjects];
     _brotherDeviceList = (NSMutableArray*)[_networkManager getPrinterNetInfo];
 
-    NSLog(@"_brotherDeviceList [%@]",_brotherDeviceList);
+    NSLog(@"RNBrotherPrinters: _brotherDeviceList [%@]",_brotherDeviceList);
 
     NSMutableArray *_serializedArray = [[NSMutableArray alloc] initWithCapacity:_brotherDeviceList.count];
 
     for (BRPtouchDeviceInfo *deviceInfo in _brotherDeviceList) {
         [_serializedArray addObject:[self serializeDeviceInfo:deviceInfo]];
 
-        NSLog(@"Model: %@, IP Address: %@", deviceInfo.strModelName, deviceInfo.strIPAddress);
+        NSLog(@"RNBrotherPrinters: Model: %@, IP Address: %@", deviceInfo.strModelName, deviceInfo.strIPAddress);
 
     }
 
@@ -185,9 +198,10 @@ RCT_REMAP_METHOD(printImage, deviceInfo:(NSDictionary *)device printerUri: (NSSt
     deviceInfo.strNodeName = [RCTConvert NSString:device[@"nodeName"]];
     deviceInfo.strMACAddress = [RCTConvert NSString:device[@"macAddress"]];
 
-    NSLog(@"We got here");
+    NSLog(@"RNBrotherPrinters: We got here");
 
     return deviceInfo;
 }
 
 @end
+
